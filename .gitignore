@@ -101,3 +101,4 @@ pyproject.toml
 
 # local stuff
 .python-version
+session_max/
