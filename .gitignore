@@ -1,3 +1,7 @@
+session_max
+session_max/
+
+
 .DS_Store
 .vscode
 ### JetBrains template
