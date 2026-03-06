@@ -1,5 +1,5 @@
-session_max
-session_max/
+.session_max
+.session_max/
 
 
 .DS_Store
