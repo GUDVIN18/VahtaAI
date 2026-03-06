@@ -7,7 +7,7 @@ dialogs_table = Table(
     metadata,
     Column("id", BigInteger, primary_key=True),
     Column("uuid", UUID(as_uuid=True), nullable=False, unique=True),
-    Column("user_id", Integer, nullable=True),
+    Column("max_user_id", Integer, nullable=True),
     Column("question", Text, nullable=False),
     Column("answer", Text, nullable=True),
     Column("created_at", DateTime, nullable=False, server_default=func.now()),

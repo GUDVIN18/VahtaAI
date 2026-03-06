@@ -39,21 +39,21 @@ class AIModule:
     @staticmethod
     async def generate_text_pipe(
         conn: Connection,
-        user_id: int,
+        max_user_id: int,
         message: str
     ) -> ResponseFormatAi:    
         try:
             dialog_id, dialog_uuid = await AiCRUD(conn=conn).create(
-                user_id=user_id,
+                max_user_id=max_user_id,
                 question=message
             )
         except Exception as e:
-            log.error(f"{user_id=}: Ошибка при создании записи: {e}")
+            log.error(f"{max_user_id=}: Ошибка при создании записи: {e}")
             raise
         try:
             # Получаем историю
             current_history = RedisClient(
-                session_id=f"{user_id}"
+                session_id=f"{max_user_id}"
             ).get_session_history_v2()
             log.info(f"Успешно перешли к инициализации main_agent")
             agent = create_agent(
@@ -79,14 +79,14 @@ class AIModule:
             response: ResponseFormatAi=response['structured_response']
 
             RedisClient(
-                session_id=f"{user_id}"
+                session_id=f"{max_user_id}"
             ).add_message(
                 role="user",
                 message=message
             )
             
             RedisClient(
-                session_id=f"{user_id}"
+                session_id=f"{max_user_id}"
             ).add_message(
                 role="ai",
                 message=response.answer
@@ -99,7 +99,7 @@ class AIModule:
                     answer=response.answer
                 )
             except Exception as e:
-                log.error(f"{user_id=}: Ошибка при обновлении диалога {e}")
+                log.error(f"{max_user_id=}: Ошибка при обновлении диалога {e}")
 
             try:
                 log.success(f"{response} \n\n")

@@ -12,6 +12,8 @@ steps = [
         CREATE TABLE IF NOT EXISTS users (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             user_uuid UUID NOT NULL UNIQUE,
+            max_user_id INTEGER,
+            phone VARCHAR(255),
             full_name VARCHAR(255) NOT NULL,
             age INTEGER,
             citizenship VARCHAR(120),
@@ -23,7 +25,8 @@ steps = [
 
         CREATE TABLE IF NOT EXISTS user_states (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            user_id INTEGER,
+            max_user_id INTEGER,
+            phone VARCHAR(255),
             source VARCHAR(50) NOT NULL,
             used_voice_messages JSONB,
             funnel_stage VARCHAR(120),

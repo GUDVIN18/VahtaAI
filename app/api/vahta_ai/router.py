@@ -25,12 +25,12 @@ class AiRouter:
     )
     async def llm_send_messages(
         self,
-        user_id: int,
+        max_user_id: int,
         question: str
     ):
         response: ResponseFormatAi = await AIModule.generate_text_pipe(
             conn=self.conn,
-            user_id=user_id,
+            max_user_id=max_user_id,
             message=question
         )
         return response

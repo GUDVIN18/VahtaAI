@@ -7,6 +7,8 @@ users_table = Table(
     metadata,
     Column("id", BigInteger, primary_key=True),
     Column("user_uuid", UUID(as_uuid=True), nullable=False, unique=True),
+    Column("max_user_id", Integer, nullable=True),
+    Column("phone", String(255), nullable=True),
     Column("full_name", String(255), nullable=False),
     Column("age", Integer, nullable=True),
     Column("citizenship", String(120), nullable=True),

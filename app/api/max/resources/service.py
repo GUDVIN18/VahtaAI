@@ -3,12 +3,21 @@ from __future__ import annotations
 import html
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-
+import re
 import aiohttp
 from yarl import URL
 
 from app.include.logging_config import logger as log
 
+
+
+def normalize_phone(phone: str) -> str:
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) == 11 and digits.startswith("8"):
+        digits = "7" + digits[1:]
+    if len(digits) != 11 or not digits.startswith("7"):
+        raise ValueError("Телефон должен быть в формате +79XXXXXXXXX")
+    return "+" + digits
 
 def _user_agent_for_source_agent(url: str) -> str:
     source_agent = dict(parse_qsl(urlsplit(url).query)).get("srcAg", "")

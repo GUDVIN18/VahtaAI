@@ -1,0 +1,1 @@
+from .vahta import MaxCRUD

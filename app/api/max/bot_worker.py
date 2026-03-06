@@ -4,6 +4,8 @@ from pymax.types import Message, User
 from pymax.static.enum import AttachType
 from app.include.logging_config import logger as log
 from .resources.service import download_voice
+from app.core.db.connection import db_pool
+from .resources.crud import MaxCRUD
 
 client = MaxClient(
     phone="+79206786941",
@@ -61,5 +63,56 @@ async def unread_checker():
             message_id=last.id
         )
 
+
+@client.task(seconds=10)
+async def process_pending_outreach() -> None:
+    await asyncio.sleep(30)
+    async with db_pool.database.connection() as conn:
+        states = await MaxCRUD(conn).get_pending_outreach(limit=20)
+
+    for state in states:
+        phone = state.get("phone")
+        source = state.get("source")
+        if not phone:
+            continue
+
+        try:
+            user: User = await client.search_by_phone(phone)
+            async with db_pool.database.connection() as conn:
+                crud = MaxCRUD(conn)
+                user_create = await crud.create_user(
+                    max_user_id=user.id,
+                    phone=phone,
+                    source=source
+                )
+                if user_create == False:
+                    # значит он существует
+                    pass
+            await client.add_contact(user.id)
+            chat_id = client.get_chat_id(client.me.id, user.id)
+        except Exception as exc:
+            log.warning(f"Cannot add contact {phone}: {exc}")
+            continue
+
+        async with db_pool.database.connection() as conn:
+            crud = MaxCRUD(conn)
+            await crud.create_or_update_user_state(
+                phone=phone,
+                state="get_user_info"
+            )
+            log.info(f"Начали обработку пользователя")
+
+        # await _send_message(chat_id, state["id"], GREETING_TEXT, allow_voice=False)
+
+async def _run_worker() -> None:
+    await db_pool.init_db()
+    try:
+        await client.start()
+    finally:
+        await db_pool.close_db()
+
+
 if __name__ == "__main__":
-    asyncio.run(client.start())
+    asyncio.run(_run_worker())
+
+

@@ -15,7 +15,7 @@ class AiCRUD:
 
     async def create(
         self,
-        user_id: uuid.UUID,
+        max_user_id: int,
         question: str,
     ) -> tuple[int, uuid.UUID]:
         query = (
@@ -23,7 +23,7 @@ class AiCRUD:
             .insert()
             .values(
                 uuid=uuid.uuid4(),
-                user_id=user_id,
+                max_user_id=max_user_id,
                 question=question,
             )
             .returning(
@@ -56,7 +56,7 @@ class AiCRUD:
 
     async def get_many(
         self,
-        user_id: int,
+        max_user_id: int,
         date: dt.date,
         limit: int,
         user_uuid: uuid.UUID = None,
@@ -64,7 +64,7 @@ class AiCRUD:
     ) -> List[HistoryFromDB]:
         # выводим по лимиту с фильром по create_at
         filter_conditions = [
-            dialogs_table.c.user_id == user_id,
+            dialogs_table.c.max_user_id == max_user_id,
             dialogs_table.c.created_at == create_at,   
         ]
         if user_uuid is not None:
