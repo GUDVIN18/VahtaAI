@@ -80,11 +80,9 @@ async def _download_to_file(session: aiohttp.ClientSession, url: str, file_path:
     return True, f"saved={file_path.name}"
 
 
-async def download_voice(
-    attach,
-) -> Path | None:
+async def download_voice(attach) -> Path | None:
     base_url = html.unescape(str(attach.url)).strip()
-    file_path = f"app/api/vahta_ai/voice/upload/audio_{attach.audio_id}.mp3"
+    file_path = Path(f"app/api/vahta_ai/voice/upload/audio_{attach.audio_id}.mp3")
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     headers = {

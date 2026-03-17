@@ -1,10 +1,10 @@
 from __future__ import annotations
-
+from app.include.logging_config import logger as log
 import uuid
 from datetime import datetime
-from typing import Any
-
-from sqlalchemy import or_
+from typing import Any, Optional
+from app.api.max.resources.schemas.states import UserState
+from sqlalchemy import or_, update, select
 from databases.core import Connection
 
 from app.core.db.tables.user import users_table
@@ -21,15 +21,21 @@ class MaxCRUD:
         max_user_id: int,
         phone: str,
         source: str,
+        chat_id: int
     ) -> dict[str, Any] | bool:
 
         existing = await self.conn.fetch_one(
             users_table.select().where(
-                users_table.c.max_user_id == max_user_id
+                or_(
+                    users_table.c.max_user_id == max_user_id,
+                    users_table.c.phone == phone
+                )
             )
         )
+        log.info(f"{existing=}")
 
-        if existing:
+        if existing is not None:
+            existing = dict(existing)
             return False
 
         now = datetime.utcnow()
@@ -39,22 +45,58 @@ class MaxCRUD:
             .values(
                 max_user_id=max_user_id,
                 phone=phone,
-                source=source,
-                used_voice_messages=[],
-                funnel_stage="pending_outreach",
+                chat_id=chat_id,
+                user_uuid=uuid.uuid4(),
+                created_at=now,
                 updated_at=now,
             )
             .returning(users_table)
         )
-
         return dict(inserted)
 
+    async def get_user(
+        self,
+        max_user_id: int | None = None,
+        phone: str | None = None
+    ) -> Optional[dict[str, Any]]:
+
+        query = select(users_table)
+
+        if max_user_id:
+            query = query.where(users_table.c.max_user_id == max_user_id)
+
+        if phone:
+            query = query.where(users_table.c.phone == phone)
+
+        row = await self.conn.fetch_one(query)
+
+        if row:
+            return dict(row)
+
+        return None
+
     async def update(
-            self, 
-            max_user_id: int
-    ) -> dict[str, Any]:
-        now = datetime.utcnow()
-        pass
+        self,
+        max_user_id: int,
+        **fields
+    ) -> Optional[dict[str, Any]]:
+
+        if not fields:
+            return None
+
+        fields["updated_at"] = datetime.utcnow()
+
+        row = await self.conn.fetch_one(
+            users_table.update()
+            .where(users_table.c.max_user_id == max_user_id)
+            .values(**fields)
+            .returning(users_table)
+        )
+
+        if row:
+            return dict(row)
+
+        return None
 
     # получаем очередь
     async def get_pending_outreach(self, limit: int = 20) -> list[dict[str, Any]]:
@@ -69,8 +111,25 @@ class MaxCRUD:
 
     # Получаем состояние пользователя (на каком он этапе)
     async def get_state_by_chat_id(self, chat_id: int) -> dict[str, Any] | None:
+        user_row = await self.conn.fetch_one(
+            users_table.select().where(users_table.c.chat_id == chat_id)
+        )
+        if not user_row:
+            return None
+        user = dict(user_row)
+        if not user.get("max_user_id"):
+            return None
+
         row = await self.conn.fetch_one(
-            user_states_table.select().where(user_states_table.c.max_chat_id == chat_id)
+            user_states_table.select().where(
+                user_states_table.c.max_user_id == user["max_user_id"]
+            )
+        )
+        return dict(row) if row else None
+
+    async def get_state_by_max_user_id(self, max_user_id: int) -> dict[str, Any] | None:
+        row = await self.conn.fetch_one(
+            user_states_table.select().where(user_states_table.c.max_user_id == max_user_id)
         )
         return dict(row) if row else None
 
@@ -82,7 +141,8 @@ class MaxCRUD:
     
     async def create_or_update_user_state(
         self,
-        source: str,
+        state: UserState,
+        source: str| None = None,
         phone: str | None = None,
         max_user_id: int | None = None,
     ) -> dict[str, Any]:
@@ -90,13 +150,18 @@ class MaxCRUD:
         filters = []
         if phone:
             filters.append(user_states_table.c.phone == phone)
+        if max_user_id is not None:
+            filters.append(user_states_table.c.max_user_id == max_user_id)
 
-        existing = await self.conn.fetch_one(
-            user_states_table.select().where(or_(*filters))
-        )
+        if not filters:
+            raise ValueError("phone or max_user_id must be provided")
+
+        existing = await self.conn.fetch_one(user_states_table.select().where(or_(*filters)))
+        existing = dict(existing) if existing else None
 
         if existing:
             update_values = dict()
+            update_values["funnel_stage"] = state
             update_values["updated_at"] = now
             if source:
                 update_values["source"] = source
@@ -119,7 +184,7 @@ class MaxCRUD:
         if max_user_id is not None:
             insert_values["max_user_id"] = max_user_id
         insert_values.setdefault("used_voice_messages", [])
-        insert_values.setdefault("funnel_stage", "pending_outreach")
+        insert_values.setdefault("funnel_stage", state)
         insert_values["updated_at"] = now
 
         inserted = await self.conn.fetch_one(

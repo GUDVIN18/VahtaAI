@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     FOLDER_TTS_YANDEX_ID: str = Field(..., env="FOLDER_TTS_YANDEX_ID")
     YANDEX_SERVICE_ACCOUNT_API: str = Field(..., env="YANDEX_SERVICE_ACCOUNT_API")
 
+    #VAXTA
+    VAXTAREKRUT_API_KEY: str = Field(..., env="VAXTAREKRUT_API_KEY")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

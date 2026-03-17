@@ -1,64 +1,56 @@
+from __future__ import annotations
+
 import asyncio
-import json
-from app.include.logging_config import logger
-from app.include.config import config
-from app.api.avito.resources.service import get_avito_chats, get_avito_messages
+from typing import Any
+
+from app.api.max.resources.schemas.states import UserState
+from app.core.db.connection import db_pool
+from app.core.db.tables.user_state import user_states_table
+from app.api.vahta_ai.graph.step_1 import run_step_1
+from app.api.max.bot_worker import client
 
 
-async def message_polling_worker():
-    logger.info("Worker started. Monitoring items: %s", config.AVITO_ITEM_IDS)
-    
-    # Хранилище ID последних сообщений, чтобы не обрабатывать их повторно
-    # В идеале это должен быть Redis, но для "простого" решения хватит dict в памяти
-    last_processed_msg = {} 
+def _extract_user_state(user_state: UserState | str | dict[str, Any]) -> UserState:
+    if isinstance(user_state, dict):
+        user_state = user_state.get("funnel_stage")
+    return UserState(user_state)
 
-    while True:
-        try:
-            # 1. Запрашиваем чаты с непрочитанными сообщениями по нашим айтемам
-            chats_response = await get_avito_chats(
-                user_id=config.AVITO_USER_ID,
-                item_ids=config.AVITO_ITEM_IDS,
-                unread_only=True, # Берем только те, где есть что-то новое
-                limit=10
+
+def process_user_state(user_state: UserState | str | dict[str, Any]) -> None:
+    state = _extract_user_state(user_state)
+
+    match state:
+        case UserState.PENDING_OUTREACH:
+            print(UserState.PENDING_OUTREACH.value)
+        case UserState.GET_USER_INFO:
+            # тут вызов функции step_1.py
+            ai_message = run_step_1(session_id="1234", message="Начали")
+            ai_message=ai_message['reply']
+            client.send_message(
+                chat_id=user.caht_id,
+                text=f"{ai_message}",
+                notify=True
             )
-            
-            # Извлекаем данные (учитываем, что возвращается JSONResponse)
-            chats_data = chats_response.body_decode() if hasattr(chats_response, 'body_decode') else chats_response.content
-            # Если используешь FastAPI Response напрямую, достаем payload:
-            
-            chats = json.loads(chats_response.body).get("chats", [])
 
-            for chat in chats:
-                chat_id = chat.get("id")
-                last_msg_id = chat.get("last_message", {}).get("id")
 
-                # Проверяем, обрабатывали ли мы это сообщение уже
-                if last_processed_msg.get(chat_id) == last_msg_id:
-                    continue
+async def fetch_user_states() -> list[dict[str, Any]]:
+    async with db_pool.database.connection() as conn:
+        rows = await conn.fetch_all(user_states_table.select())
+    return [dict(row) for row in rows]
 
-                logger.info(f"New activity in chat {chat_id}! Fetching messages...")
 
-                # 2. Дергаем ручку получения сообщений
-                messages_response = await get_avito_messages(
-                    user_id=config.AVITO_USER_ID,
-                    chat_id=chat_id,
-                    limit=10
-                )
-                
-                messages = json.loads(messages_response.body).get("messages", [])
-                
-                # Тут твоя логика обработки (например, переслать в Telegram или БД)
-                for msg in messages:
-                    logger.info(f"[{chat_id}] New message: {msg.get('content', {}).get('text')}")
+async def run_worker(poll_interval: int = 2) -> None:
+    await db_pool.init_db()
+    try:
+        while True:
+            user_states = await fetch_user_states()
+            for user_state in user_states:
+                process_user_state(user_state)
 
-                # Запоминаем последнее сообщение
-                last_processed_msg[chat_id] = last_msg_id
+            await asyncio.sleep(poll_interval)
+    finally:
+        await db_pool.close_db()
 
-        except Exception as e:
-            logger.error(f"Worker error: {e}")
-
-        # Пауза 1 секунда
-        await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    asyncio.run(message_polling_worker())
+    asyncio.run(run_worker())

@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, DateTime, Integer, String, Table, Text, func
+from sqlalchemy import BigInteger, Column, DateTime, Integer, String, Table, Text, func, BIGINT
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from app.core.db.tables.meta import metadata
 
@@ -8,8 +8,9 @@ users_table = Table(
     Column("id", BigInteger, primary_key=True),
     Column("user_uuid", UUID(as_uuid=True), nullable=False, unique=True),
     Column("max_user_id", Integer, nullable=True),
+    Column("chat_id", BIGINT, nullable=True),
     Column("phone", String(255), nullable=True),
-    Column("full_name", String(255), nullable=False),
+    Column("full_name", String(255), nullable=True),
     Column("age", Integer, nullable=True),
     Column("citizenship", String(120), nullable=True),
     Column("current_location", String(255), nullable=True),

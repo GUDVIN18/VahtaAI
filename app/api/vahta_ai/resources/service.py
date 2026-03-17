@@ -21,6 +21,10 @@ from langchain_core.messages import (
     SystemMessage
 )
 from .crud import AiCRUD
+import subprocess
+from pathlib import Path
+import httpx
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_TARGET_MODEL = "qwen3-tts-vc-2026-01-22"
@@ -59,7 +63,7 @@ class AIModule:
             agent = create_agent(
                 model=ChatOpenAI(
                     api_key=f"{config.YANDEX_API_KEY}",
-                    model=f"gpt://{config.FOLDER_LLM_YANDEX_ID}/yandexgpt-5-pro/latest",
+                    model=f"gpt://{config.FOLDER_LLM_YANDEX_ID}/yandexgpt-5.1/latest",
                     base_url="https://ai.api.cloud.yandex.net/v1",
                     temperature=0.4,
                     top_p=0.95,
@@ -154,28 +158,61 @@ class AIModule:
         audio_file_path: str,
         lang: str = "ru-RU",
     ):
-            headers = {
-                "Authorization": f"Api-Key {config.YANDEX_SERVICE_ACCOUNT_API}",
-            }
-            audio_bytes = Path(audio_file_path).read_bytes()
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                try:
-                    response = await client.post(
-                        f"https://stt.api.cloud.yandex.net/speech/v1/stt:recognize?folderId={config.FOLDER_TTS_YANDEX_ID}&lang={lang}",
-                        headers=headers,
-                        content=audio_bytes,
-                    )
-                except httpx.HTTPStatusError as e:
-                    raise RuntimeError(
-                        f"TTS HTTP error {e.response.status_code}: {e.response.text}"
-                    )
-                except httpx.RequestError as e:
-                    raise RuntimeError(f"TTS request failed: {str(e)}")
-            data=response.json()
-            log.info(f"{response}: генерация текста из голоса прошла успешно")
-            return data['result']
+        path = Path(audio_file_path)
+
+        # --- если mp3 → конвертируем в ogg ---
+        if path.suffix.lower() == ".mp3":
+            ogg_path = path.with_suffix(".ogg")
+
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(path),
+                    "-c:a",
+                    "libopus",
+                    "-b:a",
+                    "48k",
+                    str(ogg_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            path = ogg_path
+
+        headers = {
+            "Authorization": f"Api-Key {config.YANDEX_SERVICE_ACCOUNT_API}",
+        }
+
+        audio_bytes = path.read_bytes()
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.post(
+                    f"https://stt.api.cloud.yandex.net/speech/v1/stt:recognize"
+                    f"?folderId={config.FOLDER_TTS_YANDEX_ID}&lang={lang}",
+                    headers=headers,
+                    content=audio_bytes,
+                )
+                response.raise_for_status()
+
+            except httpx.HTTPStatusError as e:
+                raise RuntimeError(
+                    f"TTS HTTP error {e.response.status_code}: {e.response.text}"
+                )
+
+            except httpx.RequestError as e:
+                raise RuntimeError(f"TTS request failed: {str(e)}")
+
+        data = response.json()
+        log.info(f"{response}: генерация текста из голоса прошла успешно: {data["result"]}")
+
+        return data["result"]
 
 
 
 if __name__ == '__main__':
-    asyncio.run(AIModule.voice_to_text_pipe(audio_file_path="/vahta-ai/app/api/vahta_ai/voice/speech/speech_2062a9246409474fa157c122fb11970f.ogg"))
+    asyncio.run(AIModule.voice_to_text_pipe(audio_file_path="/VahtaAI/app/api/vahta_ai/voice/upload/audio_12390534111247.mp3"))

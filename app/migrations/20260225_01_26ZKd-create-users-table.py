@@ -14,7 +14,7 @@ steps = [
             user_uuid UUID NOT NULL UNIQUE,
             max_user_id INTEGER,
             phone VARCHAR(255),
-            full_name VARCHAR(255) NOT NULL,
+            full_name VARCHAR(255),
             age INTEGER,
             citizenship VARCHAR(120),
             current_location VARCHAR(255),

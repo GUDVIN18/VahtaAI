@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from databases.core import Connection
-
 from app.core.db.connection import db_pool
 from .resources.crud import MaxCRUD
 from .resources.service import normalize_phone
-
+from app.api.max.resources.schemas.states import UserState
 
 router = APIRouter(prefix="/max", tags=["Module MAX"])
 
@@ -32,6 +31,7 @@ async def start_outreach(
 
     state = await MaxCRUD(conn).create_or_update_user_state(
         phone=normalized_phone,
+        state=UserState.PENDING_OUTREACH,
         source=(payload.source or "base").strip().lower(),
     )
 
