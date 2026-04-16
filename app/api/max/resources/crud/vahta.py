@@ -24,16 +24,18 @@ class MaxCRUD:
         chat_id: int
     ) -> dict[str, Any] | bool:
 
-        existing = await self.conn.fetch_one(
-            users_table.select().where(
-                or_(
-                    users_table.c.max_user_id == max_user_id,
-                    users_table.c.phone == phone
-                )
-            )
-        )
-        log.info(f"{existing=}")
+        query = users_table.select()
 
+        if max_user_id:
+            query = query.where(users_table.c.max_user_id == max_user_id)
+        elif phone:
+            query = query.where(users_table.c.phone == phone)
+
+        existing = await self.conn.fetch_one(query)
+        if existing:
+            log.info(f"existing={dict(existing)}")
+        else:
+            log.info("existing=None")
         if existing is not None:
             existing = dict(existing)
             return False

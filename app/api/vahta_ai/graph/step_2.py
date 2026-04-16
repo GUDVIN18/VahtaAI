@@ -110,15 +110,6 @@ _CITIZENSHIP_MAP = {
     "молдова": "Молдова", "украина": "Украина",
 }
 
-
-def _candidate_to_find_jobs_kwargs(candidate: dict) -> dict:
-    """Собирает kwargs для find_jobs из данных кандидата."""
-    kwargs: dict = {}
-    city = str(candidate.get("city") or "").strip()
-    kwargs["region"] = city or "Москва"
-    return kwargs
-
-
 # ─── Service ─────────────────────────────────────────────────────────────────
 
 
@@ -191,10 +182,14 @@ class Step2Service:
     # ── Jobs ─────────────────────────────────────────────────────────────────
 
     def _fetch_jobs(self, candidate: dict) -> list[dict]:
-        kwargs = _candidate_to_find_jobs_kwargs(candidate)
-        log.info("find_jobs kwargs: %s", kwargs)
+        kwargs: dict = {}
+        city = str(candidate.get("city") or "").strip()
+        kwargs["region"] = city or "Москва"
         try:
-            jobs = list(asyncio.run(find_jobs(**kwargs)))[:10]
+            jobs = list(asyncio.run(find_jobs(**kwargs)))[:15]
+            if not jobs:
+                kwargs["region"] = "Москва"
+                jobs = list(asyncio.run(find_jobs(**kwargs)))[:15]
             log.info("find_jobs returned %d jobs", len(jobs))
             return jobs
         except Exception as e:
@@ -211,7 +206,7 @@ class Step2Service:
             "Нужны мужчины": job.get("men_needed"),
             "Нужны женщины": job.get("women_needed"),
             "Возраст": f"{job.get('age_min', '?')}-{job.get('age_max', '?')} лет",
-            "Описание": str(job.get("description") or "")[:1200],
+            "Описание": str(job.get("description") or ""),
         }
         return "\n".join(f"{k}: {v}" for k, v in fields.items() if v not in (None, "", "?-? лет"))
 
@@ -286,8 +281,8 @@ class Step2Service:
         current_job = jobs[idx] if 0 <= idx < len(jobs) else {}
 
         history = "\n".join(
-            f"{'Кандидат' if m.type == 'human' else 'Яна'}: {m.content}"
-            for m in (self.redis.get_session_history_v2() or [])[-10:]
+            f"{'Кандидат' if m.type == 'human' else 'AI'}: {m.content}"
+            for m in (self.redis.get_session_history_v2() or [])
         )
 
         reply = self._generate_reply(

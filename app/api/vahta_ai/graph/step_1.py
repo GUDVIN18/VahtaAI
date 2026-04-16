@@ -45,7 +45,7 @@ INTRO_TEXT = (
 STEP_2_TRANSITION = "А что бы вы хотели? Что вообще рассматриваете?"
 
 VARY_PROMPT = ChatPromptTemplate.from_template(
-    "Слегка перефразируй сообщение рекрутера — измени 1-2 слова или порядок слов, "
+    "Слегка перефразируй сообщение рекрутера — "
     "сохрани смысл, тон и все эмодзи. Верни ТОЛЬКО текст сообщения без кавычек и пояснений.\n\n"
     "Сообщение: {text}"
 )
@@ -69,7 +69,7 @@ FIELD_LABELS: dict[str, str] = {
     "full_name": "ФИО",
     "age": "возраст",
     "citizenship": "гражданство",
-    "city": "город",
+    "city": "город поиска работы",
     "start_date": "дата выезда",
     "experience": "опыт работы",
     "previous_job": "предыдущее место работы",
@@ -158,7 +158,6 @@ FINAL_REASON_PROMPT = ChatPromptTemplate.from_template("""
 Напиши ОДНО короткое сообщение:
 - Начни с "Да, КОНЕЧНО ПОНИМАЮ ВАС!" 
 - Затем ДОСЛОВНО перечисли проблемы из ответа кандидата (не перефразируй, говори именно то, что он написал)
-- Скажи что это неприятно / понятно
 - Предложи найти объект который понравится, упомяни что есть выбор
 - В конце напиши просто: "Давайте?"
 
@@ -241,11 +240,37 @@ class Step1Service:
     def _missing_fields(self, candidate: dict[str, Any]) -> list[str]:
         return [f for f in CandidateSchema.model_fields if self._is_empty(candidate.get(f))]
 
+    def _normalize_city(self, city: str) -> str:
+        if not city:
+            return city
+
+        city_clean = city.strip().lower()
+
+        mapping = {
+            "мск": "Москва",
+            "москва": "Москва",
+            "спб": "Санкт-Петербург",
+            "питер": "Санкт-Петербург",
+            "санкт петербург": "Санкт-Петербург",
+            "екб": "Екатеринбург",
+            "екат": "Екатеринбург",
+            "нск": "Новосибирск",
+        }
+
+        return mapping.get(city_clean, city.strip().title())
+
     def _merge(self, old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
         merged = dict(old)
+
         for k, v in self._sanitize(new).items():
-            if not self._is_empty(v):
-                merged[k] = v
+            if self._is_empty(v):
+                continue
+
+            if k == "city" and isinstance(v, str):
+                v = self._normalize_city(v)
+
+            merged[k] = v
+
         return self._sanitize(merged)
 
     def _candidate_snapshot(self, candidate: dict[str, Any]) -> str:
